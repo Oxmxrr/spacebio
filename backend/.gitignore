@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# local data / models
+data/audio/
+data/index/
+models/
+%LOCALAPPDATA%/
+
+# env
+.env
+*.env
+
+# node
+spacebio/node_modules/
+spacebio/.vite/
+spacebio/dist/
+
+# OS/editor
+.DS_Store
+.vscode/

@@ -1,0 +1,87 @@
+/* src/styles/tailwind.css */
+@import "tailwindcss";
+
+/* -------- Base (no @apply to avoid v4 warnings) -------- */
+@layer base {
+  html, body, #root { height: 100%; }
+
+  body {
+    /* text-gray-200 */
+    color: rgb(229 231 235);
+
+    /* spacey background */
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(29,78,216,.25), transparent 60%),
+      radial-gradient(900px 400px at -10% 20%, rgba(0,180,216,.18), transparent 60%),
+      linear-gradient(180deg, #0b1220, #0a0f1a);
+
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3 { font-family: 'Orbitron', system-ui, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+}
+
+/* -------- Components (hand-written CSS, no @apply) -------- */
+@layer components {
+  .glass-panel {
+    background-color: rgba(255,255,255,0.05);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 0.75rem; /* rounded-xl */
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+
+  .recharts-default-tooltip {
+    backdrop-filter: blur(6px);
+  }
+  
+  .nasa-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;        /* px-4 py-2.5 */
+    border-radius: 0.5rem;         /* rounded-lg */
+    font-weight: 600;              /* font-semibold */
+    color: white;
+    transition: filter .2s ease;
+    background: linear-gradient(180deg,#1081c7,#0b67a4);
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .nasa-button:hover { filter: brightness(1.08); }
+
+  .nasa-button-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;       /* px-3 py-2 */
+    border-radius: 0.5rem;         /* rounded-lg */
+    font-weight: 500;              /* font-medium */
+    color: rgb(191 219 254);       /* text-blue-200 */
+    border: 1px solid rgba(30,58,138,0.40); /* blue-900/40 */
+    background: rgba(16,129,199,.08);
+    transition: background .2s ease;
+  }
+  .nasa-button-secondary:hover { background: rgba(16,129,199,.16); }
+
+  .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+/* -------- Utilities -------- */
+@layer utilities {
+  .grid-auto-fit { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+}
+/* Markdown content rhythm */
+.md-content h3, .md-content h4 { margin-top: 0.25rem; margin-bottom: 0.5rem; }
+.md-content p { margin-bottom: 0.75rem; }
+.md-content ul, .md-content ol { margin-bottom: 0.75rem; }
