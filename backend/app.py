@@ -51,13 +51,22 @@ meta: List[Dict[str, Any]] = []
 def _parse_origins() -> List[str]:
     """
     ALLOWED_ORIGINS supports comma-separated URLs, e.g.:
-    ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://*.vercel.app
-    If empty, default to "*" for first deploy; tighten later.
+    ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://example.com
+    If empty, default to permissive for first deploy; tighten later.
     """
     raw = os.getenv("ALLOWED_ORIGINS", "").strip()
     if not raw:
+        # permissive default for first deploys; consider locking down later
         return ["*"]
     return [o.strip() for o in raw.split(",") if o.strip()]
+
+def _allow_origin_regex() -> Optional[str]:
+    """
+    If you want wildcard subdomains (e.g., Vercel previews), set:
+    ALLOW_ORIGIN_REGEX=^https://.*\\.vercel\\.app$
+    """
+    rx = os.getenv("ALLOW_ORIGIN_REGEX", "").strip()
+    return rx or None
 
 def _load_index_and_meta():
     """Load FAISS index + metadata once at startup. Skips index in light mode or when FAISS absent."""
@@ -192,10 +201,11 @@ app = FastAPI(title="Space Biology Knowledge Engine (Backend)", lifespan=lifespa
 # Static (exists because we created the directory above)
 app.mount("/audio", StaticFiles(directory="data/audio"), name="audio")
 
-# CORS (tighten by setting ALLOWED_ORIGINS in Render env)
+# CORS (tighten by setting ALLOWED_ORIGINS / ALLOW_ORIGIN_REGEX in Render env)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_origins(),
+    allow_origin_regex=_allow_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -288,6 +298,10 @@ def root():
 def health():
     return {"status": "ok"}
 
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
 @app.get("/ping")
 def ping():
     return {"status": "ok", "index_loaded": bool(index), "vectors": index.ntotal if index else 0}
@@ -322,7 +336,7 @@ def library(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     sort: Optional[str] = Query(None, description="Sort by 'year' or 'path'"),
-    order: str = Query("desc", regex="^(asc|desc)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
     rows = meta
 
@@ -332,12 +346,11 @@ def library(
     if q:
         needle = q.lower().strip()
         def hit(r: Dict[str, Any]) -> bool:
-            return any(
-                (r.get("doc_title") or "").lower().find(needle) >= 0 or
-                (r.get("text") or "").lower().find(needle) >= 0 or
-                (r.get("doc_path") or "").lower().find(needle) >= 0
-            for _ in [0]
-        )
+            return (
+                needle in (r.get("doc_title") or "").lower()
+                or needle in (r.get("text") or "").lower()
+                or needle in (r.get("doc_path") or "").lower()
+            )
         rows = [r for r in rows if hit(r)]
 
     if sort in ("year", "path"):
