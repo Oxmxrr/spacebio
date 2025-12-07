@@ -13,8 +13,24 @@ import {
   StoryParams,
   StoryResponse,
 } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000').replace(/\/+$/, '');
+
+// Token storage keys (same as AuthContext)
+const TOKEN_KEY = 'spacebio_auth_token';
+
+function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const token = getStoredToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
 
 /** Raw shapes from the backend */
 type RawStatsResponse = {
@@ -57,6 +73,7 @@ class ApiClient {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           ...options.headers,
         },
         ...options,
@@ -147,6 +164,7 @@ class ApiClient {
 
     const response = await fetch(this.buildURL('/stt'), {
       method: 'POST',
+      headers: getAuthHeaders(),
       body: formData,
     });
 

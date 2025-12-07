@@ -1,5 +1,21 @@
 // src/types/index.ts
 
+/** Authentication */
+export type AuthStatusResponse = {
+  auth_required: boolean;
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+};
+
+export type AuthVerifyResponse = {
+  valid: boolean;
+  user: Record<string, unknown>;
+};
+
 /** Ping / status */
 export type PingResponse = {
   status: 'ok';

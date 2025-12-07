@@ -7,9 +7,11 @@ import {
   Clock,
   Wifi,
   WifiOff,
-  Rocket
+  Rocket,
+  LogOut
 } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   title: string;
@@ -20,6 +22,7 @@ type Props = {
 export const AppLayout: React.FC<Props> = ({ title, subtitle, children }) => {
   const location = useLocation();
   const { ping } = useApi();
+  const { logout, authRequired } = useAuth();
   const isOnline = ping.data?.index_loaded ?? false;
   const isLoading = ping.isLoading;
 
@@ -62,21 +65,33 @@ export const AppLayout: React.FC<Props> = ({ title, subtitle, children }) => {
           ))}
         </nav>
 
-        <div className="mt-auto flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-          <span className="text-xs text-gray-400">Backend Status</span>
-          {isLoading ? (
-            <span className="inline-flex items-center gap-1 text-yellow-400 text-xs">
-              <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-              Checking…
-            </span>
-          ) : isOnline ? (
-            <span className="inline-flex items-center gap-1 text-green-400 text-xs">
-              <Wifi className="w-3 h-3" /> Online
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-red-400 text-xs">
-              <WifiOff className="w-3 h-3" /> Offline
-            </span>
+        <div className="mt-auto space-y-2">
+          <div className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+            <span className="text-xs text-gray-400">Backend Status</span>
+            {isLoading ? (
+              <span className="inline-flex items-center gap-1 text-yellow-400 text-xs">
+                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                Checking…
+              </span>
+            ) : isOnline ? (
+              <span className="inline-flex items-center gap-1 text-green-400 text-xs">
+                <Wifi className="w-3 h-3" /> Online
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-red-400 text-xs">
+                <WifiOff className="w-3 h-3" /> Offline
+              </span>
+            )}
+          </div>
+
+          {authRequired && (
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors text-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
           )}
         </div>
       </aside>

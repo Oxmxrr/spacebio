@@ -16,11 +16,22 @@ try:
 except Exception:  # pragma: no cover
     faiss = None
 
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Authentication
+from auth import (
+    get_current_user, login as auth_login, LoginRequest, TokenResponse,
+    is_auth_enabled
+)
 
 from rag_core import (
     get_client, CHAT_MODEL, EMBED_MODEL, embed_texts, build_prompt,
@@ -31,6 +42,11 @@ from speech_io import tts_piper_to_wav, stt_transcribe, gpu_status
 
 # silence generic pkg_resources deprecation warnings
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API", category=UserWarning)
+
+# --------------------------------------------------------------------------------------
+# Rate Limiter Setup
+# --------------------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
 
 # --------------------------------------------------------------------------------------
 # Config & paths
@@ -198,6 +214,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Space Biology Knowledge Engine (Backend)", lifespan=lifespan)
 
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Static (exists because we created the directory above)
 app.mount("/audio", StaticFiles(directory="data/audio"), name="audio")
 
@@ -282,7 +302,7 @@ class StoryResponse(BaseModel):
     sources: List[MindMapSource]
 
 # --------------------------------------------------------------------------------------
-# System / Status
+# System / Status (Public endpoints - no auth required)
 # --------------------------------------------------------------------------------------
 @app.get("/")
 def root():
@@ -291,7 +311,8 @@ def root():
         "mode": BOOT_MODE,
         "faiss": bool(faiss),
         "index_loaded": bool(index),
-        "vectors": int(index.ntotal) if index is not None else 0
+        "vectors": int(index.ntotal) if index is not None else 0,
+        "auth_required": is_auth_enabled()
     }
 
 @app.get("/health")
@@ -302,18 +323,41 @@ def health():
 def healthz():
     return {"ok": True}
 
+@app.get("/auth/status")
+def auth_status():
+    """Check if authentication is required."""
+    from auth import APP_PASSWORD
+    return {
+        "auth_required": is_auth_enabled(),
+        "password_configured": len(APP_PASSWORD) > 0
+    }
+
+@app.post("/auth/login", response_model=TokenResponse)
+@limiter.limit("5/minute")  # Rate limit login attempts to prevent brute force
+def login(request: Request, body: LoginRequest):
+    """Login with password to get a JWT token."""
+    return auth_login(body.password)
+
+@app.get("/auth/verify")
+def verify_token(user: dict = Depends(get_current_user)):
+    """Verify if the current token is valid."""
+    return {"valid": True, "user": user}
+
+# --------------------------------------------------------------------------------------
+# Protected Status Endpoints (require auth)
+# --------------------------------------------------------------------------------------
 @app.get("/ping")
-def ping():
+def ping(user: dict = Depends(get_current_user)):
     return {"status": "ok", "index_loaded": bool(index), "vectors": index.ntotal if index else 0}
 
 @app.get("/gpu")
-def gpu():
+def gpu(user: dict = Depends(get_current_user)):
     status = gpu_status()
     status["faiss_gpu"] = False  # faiss-cpu (or no faiss) on cloud free tiers
     return status
 
 @app.get("/stats")
-def stats():
+def stats(user: dict = Depends(get_current_user)):
     org = Counter([r.get("organism") for r in meta if r.get("organism")])
     strsr = Counter([r.get("stressor") for r in meta if r.get("stressor")])
     plat = Counter([r.get("platform") for r in meta if r.get("platform")])
@@ -325,7 +369,7 @@ def stats():
     }
 
 # --------------------------------------------------------------------------------------
-# Library (direct meta.jsonl)
+# Library (direct meta.jsonl) - Protected
 # --------------------------------------------------------------------------------------
 @app.get("/library")
 def library(
@@ -337,6 +381,7 @@ def library(
     page_size: int = Query(20, ge=1, le=200),
     sort: Optional[str] = Query(None, description="Sort by 'year' or 'path'"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
+    user: dict = Depends(get_current_user),
 ):
     rows = meta
 
@@ -389,10 +434,11 @@ def library(
     }
 
 # --------------------------------------------------------------------------------------
-# Semantic search / Ask
+# Semantic search / Ask - Protected with rate limiting
 # --------------------------------------------------------------------------------------
 @app.get("/search")
-def search(q: str, top_k: int = 10):
+@limiter.limit("30/minute")  # Limit searches
+def search(request: Request, q: str, top_k: int = 10, user: dict = Depends(get_current_user)):
     if index is None or faiss is None:
         return JSONResponse({"error": "Index missing. Set BOOT_MODE=full and run ingest to build FAISS."}, status_code=400)
     em = embed_texts([q])
@@ -412,7 +458,8 @@ def search(q: str, top_k: int = 10):
     return {"results": out}
 
 @app.post("/ask")
-def ask(req: AskRequest):
+@limiter.limit("20/minute")  # Limit expensive LLM calls
+def ask(request: Request, req: AskRequest, user: dict = Depends(get_current_user)):
     if index is None or faiss is None:
         return JSONResponse({"error": "Index missing. Set BOOT_MODE=full and run ingest to build FAISS."}, status_code=400)
 
@@ -450,7 +497,8 @@ def ask(req: AskRequest):
     return {"answer": answer, "sources": sources}
 
 @app.post("/ask-simple")
-def ask_simple(req: AskSimpleRequest, tts: bool = False):
+@limiter.limit("20/minute")  # Limit expensive LLM calls
+def ask_simple(request: Request, req: AskSimpleRequest, tts: bool = False, user: dict = Depends(get_current_user)):
     if index is None or faiss is None:
         return JSONResponse({"error": "Index missing. Set BOOT_MODE=full and run ingest to build FAISS."}, status_code=400)
 
@@ -543,7 +591,8 @@ def _mindmap_prompt(question: Optional[str], ctx: List[Dict[str,Any]]) -> str:
     return header + body + tail
 
 @app.post("/mindmap", response_model=MindMapResponse)
-def build_mindmap(req: MindMapRequest):
+@limiter.limit("10/minute")  # Limit expensive LLM calls
+def build_mindmap(request: Request, req: MindMapRequest, user: dict = Depends(get_current_user)):
     ctx = _pick_context(req.question, req.top_k, req.organism, req.stressor, req.platform, req.paths)
     client = get_client()
     messages = [
@@ -636,19 +685,21 @@ def _story_from_context(req: StoryRequest) -> StoryResponse:
     )
 
 @app.post("/story", response_model=StoryResponse)
-def build_story(req: StoryRequest):
+@limiter.limit("10/minute")  # Limit expensive LLM calls
+def build_story(request: Request, req: StoryRequest, user: dict = Depends(get_current_user)):
     return _story_from_context(req)
 
 # Alias for compatibility with frontend that calls /storytelling
 @app.post("/storytelling", response_model=StoryResponse)
-def storytelling_alias(req: StoryRequest):
+@limiter.limit("10/minute")
+def storytelling_alias(request: Request, req: StoryRequest, user: dict = Depends(get_current_user)):
     return _story_from_context(req)
 
 # --------------------------------------------------------------------------------------
-# Speech I/O
+# Speech I/O - Protected
 # --------------------------------------------------------------------------------------
 @app.get("/tts/voices")
-def list_voices():
+def list_voices(user: dict = Depends(get_current_user)):
     voices = []
     base = os.path.join("models", "piper")
     if os.path.isdir(base):
@@ -658,7 +709,8 @@ def list_voices():
     return {"voices": voices}
 
 @app.post("/tts")
-def tts(req: TTSRequest):
+@limiter.limit("30/minute")
+def tts(request: Request, req: TTSRequest, user: dict = Depends(get_current_user)):
     text = (req.text or "").strip()
     if not text:
         return JSONResponse({"error": "text is empty"}, status_code=400)
@@ -667,7 +719,8 @@ def tts(req: TTSRequest):
     return {"audio_url": url_path, "file_path": wav_path}
 
 @app.post("/stt")
-def stt(file: UploadFile = File(...)):
+@limiter.limit("20/minute")
+def stt(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     os.makedirs("data/tmp", exist_ok=True)
     temp_path = os.path.join("data", "tmp", file.filename)
     with open(temp_path, "wb") as f:

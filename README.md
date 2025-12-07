@@ -34,15 +34,23 @@ pip install -r requirements.txt
 
 2) Environment variables (create `.env` in `backend/`)
 - You must create your own OpenAI API key and set it here.
+- **IMPORTANT**: Set a password to protect your API when hosting online!
 ```
 # Required
 OPENAI_API_KEY=sk-your-key-here
+
+# SECURITY: Set a password to protect your API (required for production!)
+APP_PASSWORD=your-strong-password-here
+
+# Optional: JWT settings
+# JWT_SECRET_KEY=your-random-secret-key  # Auto-generated if not set
+# JWT_EXPIRE_MINUTES=1440  # 24 hours default (token expiration)
 
 # Optional (defaults shown)
 CHAT_MODEL=gpt-4o-mini
 EMBED_MODEL=text-embedding-3-small
 BOOT_MODE=light             # light|full; full loads FAISS at startup
-ALLOWED_ORIGINS=*           # comma-separated list for CORS
+ALLOWED_ORIGINS=*           # comma-separated list for CORS (restrict in production!)
 
 # TTS/STT options
 PIPER_EXE=models/piper/piper.exe
@@ -66,6 +74,7 @@ This writes `data/index/meta.jsonl` and `data/index/index.faiss`.
 ```
 cd backend
 venv\Scripts\activate
+$env:BOOT_MODE = "full" (powershell)
 uvicorn app:app --reload --port 8000
 ```
 You should see logs like:
@@ -134,6 +143,41 @@ VITE_API_BASE=http://localhost:8000
 - Set environment variables securely (do not commit `.env`).
 - Persist `data/index/` artifacts or rebuild at deploy time.
 - Restrict `ALLOWED_ORIGINS` in production.
+
+### Security (Production Deployment)
+
+When hosting this application online, you MUST enable authentication to protect your OpenAI API key from unauthorized use:
+
+1. **Set a strong password** in your environment variables:
+   ```
+   APP_PASSWORD=your-very-strong-password-here
+   ```
+
+2. **Restrict CORS origins** to your frontend domain:
+   ```
+   ALLOWED_ORIGINS=https://your-frontend-domain.com
+   ```
+
+3. **Rate limiting** is enabled by default to prevent abuse:
+   - Login attempts: 5/minute (prevents brute force)
+   - Search/Ask: 20-30/minute
+   - Mindmap/Story generation: 10/minute
+
+4. **JWT tokens** are used for authentication:
+   - Tokens expire after 24 hours by default
+   - Set `JWT_EXPIRE_MINUTES` to customize expiration
+   - Set `JWT_SECRET_KEY` for consistent tokens across restarts
+
+5. **Never commit your `.env` file** - it's already in `.gitignore`
+
+Example production `.env`:
+```
+OPENAI_API_KEY=sk-your-key-here
+APP_PASSWORD=MySecurePassword123!
+JWT_SECRET_KEY=random-32-char-secret-key-here
+ALLOWED_ORIGINS=https://myapp.vercel.app
+BOOT_MODE=full
+```
 
 ### License
 Provide license terms here if applicable.
