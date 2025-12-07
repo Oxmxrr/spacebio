@@ -1,5 +1,5 @@
 # speech_io.py (CLI-based Piper for Windows + faster-whisper STT)
-import os, uuid, subprocess, tempfile, importlib
+import os, uuid, subprocess, importlib
 from typing import Tuple, Dict, Any
 from dotenv import load_dotenv
 
@@ -30,34 +30,29 @@ def tts_piper_to_wav(text: str, out_dir: str = os.path.join("data", "audio"),
     file_id  = str(uuid.uuid4())
     wav_path = os.path.join(out_dir, f"{file_id}.wav")
 
-    # Write a tiny temp input file so Windows stdin quirks never bite us
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".txt", encoding="utf-8") as tf:
-        tf.write(text.strip() + "\n")
-        tf.flush()
-        in_path = tf.name
-
-    # Build the Piper command
-    # Usage (typical): piper -m MODEL -c CONFIG -i INPUT_FILE -f OUTPUT_FILE [--cuda]
+    # Build the Piper command - Piper reads from stdin and outputs to file
+    # Usage: echo "text" | piper -m MODEL -c CONFIG -f OUTPUT_FILE
     cmd = [
         exe_path, "-m", onnx_path, "-c", cfg_path,
-        "-i", in_path, "-f", wav_path
+        "-f", wav_path
     ]
     if PIPER_USE_CUDA:
         cmd.append("--cuda")
 
     try:
-        # Run Piper and capture stderr for debugging
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        # Run Piper with text piped to stdin
+        proc = subprocess.run(
+            cmd,
+            input=(text.strip() + "\n").encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f"Piper synthesis failed (code {e.returncode}).\n"
             f"CMD: {' '.join(cmd)}\nSTDERR:\n{e.stderr.decode('utf-8', errors='ignore')}"
         )
-    finally:
-        try:
-            os.remove(in_path)
-        except Exception:
-            pass
 
     url_path = f"/audio/{os.path.basename(wav_path)}"
     return wav_path, url_path

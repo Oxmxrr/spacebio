@@ -3,6 +3,9 @@ import React, { useMemo, useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useLocation } from 'react-router-dom';
+import { AudioPlayer } from '../components/AudioPlayer';
+
+const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000').replace(/\/+$/, '');
 
 export const Story: React.FC = () => {
   const { askSimple } = useApi();
@@ -13,6 +16,7 @@ export const Story: React.FC = () => {
   // Prefer the incoming question/sources (from Search)
   const [question, setQuestion] = useState(location.state?.question || '');
   const [story, setStory] = useState<string | null>(null);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   const prefilledSources = useMemo(
@@ -24,9 +28,10 @@ export const Story: React.FC = () => {
     if (!question.trim() || running) return;
     setRunning(true);
     setStory(null);
+    setTtsAudioUrl(null);
     try {
-      // temporary: reuse ask-simple to get text; your /story endpoint can replace this
-      const res = await askSimple.mutateAsync({ question, topK: 12, tts: false });
+      // Use ask-simple with TTS enabled
+      const res = await askSimple.mutateAsync({ question, topK: 12, tts: true });
 
       const md = `# Story Draft\n\n**Prompt:** ${question}\n\n${res.answer}\n\n---\n**Key Sources**\n${
         (prefilledSources.length ? prefilledSources : (res.sources || [])).slice(0, 10)
@@ -35,6 +40,11 @@ export const Story: React.FC = () => {
       }`;
 
       setStory(md);
+
+      // Set TTS audio URL if available
+      if (res.tts_audio_url) {
+        setTtsAudioUrl(res.tts_audio_url);
+      }
     } catch (e) {
       console.error(e);
       setStory('Failed to build story.');
@@ -71,8 +81,16 @@ export const Story: React.FC = () => {
       </div>
 
       {story && (
-        <div className="glass-panel p-5 whitespace-pre-wrap text-gray-100">
-          {story}
+        <div className="glass-panel p-5">
+          {/* TTS Audio Player - Top */}
+          {ttsAudioUrl && (
+            <div className="pb-4 mb-4 border-b border-white/10 flex justify-center">
+              <AudioPlayer audioUrl={`${API_BASE}${ttsAudioUrl}`} />
+            </div>
+          )}
+          <div className="whitespace-pre-wrap text-gray-100">
+            {story}
+          </div>
         </div>
       )}
     </div>

@@ -559,8 +559,12 @@ def ask_simple(request: Request, req: AskSimpleRequest, tts: bool = False, user:
     }
 
     if tts:
-        _, url_path = tts_piper_to_wav(answer)
-        payload["tts_audio_url"] = url_path
+        try:
+            _, url_path = tts_piper_to_wav(answer)
+            payload["tts_audio_url"] = url_path
+        except Exception as e:
+            print(f"[TTS ERROR] Failed to generate audio: {e}")
+            # Don't fail the whole request, just skip TTS
 
     return payload
 

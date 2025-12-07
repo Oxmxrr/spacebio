@@ -6,6 +6,9 @@ import { AnswerCard } from '../components/AnswerCard';
 import { ResultCard } from '../components/ResultCard';
 import type { Bookmark as BookmarkType, SearchResult } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { AudioPlayer } from '../components/AudioPlayer';
+
+const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8000').replace(/\/+$/, '');
 
 const STORAGE_KEY = 'sbke:last_search';
 
@@ -24,6 +27,7 @@ export const Search: React.FC = () => {
   const [answer, setAnswer] = useState<string | null>(null);
   const [sources, setSources] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
 
   const { askSimple, search, stt } = useApi();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -139,9 +143,10 @@ export const Search: React.FC = () => {
 
   const handleSearch = async () => {
     if (!query.trim() || running) return;
+    setTtsAudioUrl(null); // Clear previous audio
     try {
       const [askResult, searchResult] = await Promise.all([
-        askSimple.mutateAsync({ question: query, topK: 12, tts: false }),
+        askSimple.mutateAsync({ question: query, topK: 12, tts: true }),
         search.mutateAsync({ query, topK: 10 }),
       ]);
 
@@ -149,6 +154,11 @@ export const Search: React.FC = () => {
       setAnswer(askResult.answer);
       setSources(askResult.sources || []);
       setSearchResults(results);
+
+      // Set TTS audio URL if available
+      if (askResult.tts_audio_url) {
+        setTtsAudioUrl(askResult.tts_audio_url);
+      }
 
       persist({
         query,
@@ -179,6 +189,7 @@ export const Search: React.FC = () => {
     setAnswer(null);
     setSources([]);
     setSearchResults([]);
+    setTtsAudioUrl(null);
     // also clear the saved state
     try {
       sessionStorage.removeItem(STORAGE_KEY);
@@ -302,6 +313,12 @@ export const Search: React.FC = () => {
         {/* Answer */}
         {answer && (
           <div className="mb-6">
+            {/* TTS Audio Player - Top */}
+            {ttsAudioUrl && (
+              <div className="mb-4 flex justify-center">
+                <AudioPlayer audioUrl={`${API_BASE}${ttsAudioUrl}`} />
+              </div>
+            )}
             <AnswerCard
               answer={answer}
               sources={sources}

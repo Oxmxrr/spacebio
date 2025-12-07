@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Square, Volume2 } from 'lucide-react';
+import { Play, Pause, Volume2, Rewind, FastForward } from 'lucide-react';
 
 interface AudioPlayerProps {
   audioUrl: string;
@@ -10,8 +10,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, className = 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -33,6 +32,13 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, className = 
     };
   }, [audioUrl]);
 
+  // Reset when URL changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [audioUrl]);
+
   const togglePlayPause = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -46,103 +52,69 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, className = 
     }
   };
 
-  const stop = () => {
+  const skip = (seconds: number) => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    audio.pause();
-    audio.currentTime = 0;
-    setIsPlaying(false);
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const newTime = parseFloat(e.target.value);
+    const newTime = Math.max(0, Math.min(audio.currentTime + seconds, duration));
     audio.currentTime = newTime;
     setCurrentTime(newTime);
   };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const newVolume = parseFloat(e.target.value);
-    audio.volume = newVolume;
-    setVolume(newVolume);
-  };
-
   const formatTime = (time: number) => {
+    if (!time || isNaN(time)) return '0:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className={`glass-panel p-4 space-y-3 ${className}`}>
+    <div className={`flex items-center gap-3 ${className}`}>
       <audio
         ref={audioRef}
         src={audioUrl}
         preload="metadata"
         className="hidden"
       />
-      
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={togglePlayPause}
-            className="nasa-button-secondary flex items-center space-x-2"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            <span>{isPlaying ? 'Pause' : 'Play'}</span>
-          </button>
-          
-          <button
-            onClick={stop}
-            className="nasa-button-secondary flex items-center space-x-2"
-          >
-            <Square className="w-4 h-4" />
-            <span>Stop</span>
-          </button>
-        </div>
 
-        <div className="flex items-center space-x-2 text-sm text-gray-300">
-          <span>{formatTime(currentTime)}</span>
-          <span>/</span>
-          <span>{formatTime(duration)}</span>
-        </div>
+      {/* -15s button */}
+      <button
+        onClick={() => skip(-15)}
+        className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+        title="Rewind 15 seconds"
+      >
+        <Rewind className="w-4 h-4" />
+      </button>
+
+      {/* Play/Pause button */}
+      <button
+        onClick={togglePlayPause}
+        className="w-12 h-12 rounded-full bg-[#1081C7] hover:bg-[#0d6ba3] flex items-center justify-center text-white transition-all shadow-lg shadow-[#1081C7]/20"
+        title={isPlaying ? 'Pause' : 'Play'}
+      >
+        {isPlaying ? (
+          <Pause className="w-5 h-5" />
+        ) : (
+          <Play className="w-5 h-5 ml-0.5" />
+        )}
+      </button>
+
+      {/* +15s button */}
+      <button
+        onClick={() => skip(15)}
+        className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+        title="Forward 15 seconds"
+      >
+        <FastForward className="w-4 h-4" />
+      </button>
+
+      {/* Time display */}
+      <div className="flex items-center gap-2 text-sm text-gray-400 ml-2">
+        <Volume2 className="w-4 h-4" />
+        <span className="font-mono">
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
       </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center space-x-2">
-          <input
-            type="range"
-            min="0"
-            max={duration || 0}
-            value={currentTime}
-            onChange={handleSeek}
-            className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Volume2 className="w-4 h-4 text-gray-400" />
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={volume}
-            onChange={handleVolumeChange}
-            className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-          />
-          <span className="text-xs text-gray-400 w-8">
-            {Math.round(volume * 100)}%
-          </span>
-        </div>
-      </div>
-
     </div>
   );
 };
