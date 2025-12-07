@@ -126,3 +126,14 @@ def gpu_status() -> Dict[str, Any]:
     out["WHISPER_USE_CUDA"] = os.getenv("WHISPER_USE_CUDA", "auto")
     out["PIPER_USE_CUDA"]   = os.getenv("PIPER_USE_CUDA", "false")
     return out
+def _get_whisper_model():
+    global _WHISPER_MODEL
+    if _WHISPER_MODEL is None:
+        size    = os.getenv("WHISPER_MODEL_SIZE", "small")
+        device  = _pick_whisper_device()
+        compute = "float16" if device == "cuda" else "int8"
+
+        print(f"[whisper] loading model={size} device={device} compute_type={compute}")
+        _WHISPER_MODEL = WhisperModel(size, device=device, compute_type=compute)
+
+    return _WHISPER_MODEL

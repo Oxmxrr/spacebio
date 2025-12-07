@@ -1,10 +1,9 @@
 // src/pages/Search.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Search as SearchIcon, Mic, Send, Loader2, X, GitBranch, FileText } from 'lucide-react';
+import { Search as SearchIcon, Mic, Send, Loader2, GitBranch, FileText } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { AnswerCard } from '../components/AnswerCard';
 import { ResultCard } from '../components/ResultCard';
-import { AudioRecorder } from '../components/AudioRecorder';
 import type { Bookmark as BookmarkType, SearchResult } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,13 +19,17 @@ type LastSearchPayload = {
 export const Search: React.FC = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [showRecorder, setShowRecorder] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
   const [sources, setSources] = useState<any[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
-  const { askSimple, search } = useApi();
+  const { askSimple, search, stt } = useApi();
   const inputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Restore last search from sessionStorage on first mount
   useEffect(() => {
@@ -61,6 +64,73 @@ export const Search: React.FC = () => {
 
   const running = askSimple.isPending || search.isPending;
 
+  // Cleanup media stream on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  const transcribeAudio = async (blob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const audioFile = new File([blob], 'recording.webm', { type: 'audio/webm' });
+      const result = await stt.mutateAsync(audioFile);
+      setQuery(result.text);
+    } catch (error) {
+      console.error('Transcription error:', error);
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleMicClick = async () => {
+    if (isTranscribing) return;
+
+    if (isRecording) {
+      // Stop recording
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+      }
+    } else {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus'
+        });
+
+        mediaRecorderRef.current = mediaRecorder;
+        chunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          chunksRef.current = [];
+          transcribeAudio(blob);
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+      }
+    }
+  };
+
   const persist = (payload: LastSearchPayload) => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -89,11 +159,6 @@ export const Search: React.FC = () => {
     } catch (error) {
       console.error('Search error:', error);
     }
-  };
-
-  const handleVoiceTranscription = async (text: string) => {
-    setQuery(text);
-    setShowRecorder(false);
   };
 
   const handleSave = () => {
@@ -166,14 +231,17 @@ export const Search: React.FC = () => {
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
               <button
-                onClick={() => setShowRecorder((v) => !v)}
-                title={showRecorder ? 'Close recorder' : 'Voice input'}
+                onClick={handleMicClick}
+                disabled={isTranscribing}
+                title={isRecording ? 'Stop recording' : isTranscribing ? 'Transcribing...' : 'Voice input'}
                 className={`rounded-xl px-3 h-10 border transition
-                  ${showRecorder
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20'
+                  ${isRecording
+                    ? 'border-red-500/40 bg-red-500/20 text-red-400 animate-pulse'
+                    : isTranscribing
+                    ? 'border-gray-500/40 bg-gray-500/10 text-gray-400 cursor-not-allowed'
                     : 'border-white/10 bg-white/5 text-gray-200 hover:bg-white/10'}`}
               >
-                {showRecorder ? <X className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                {isTranscribing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mic className="w-5 h-5" />}
               </button>
               <button
                 onClick={handleSearch}
@@ -209,16 +277,6 @@ export const Search: React.FC = () => {
             </div>
           )}
         </section>
-
-        {/* Voice Recorder */}
-        {showRecorder && (
-          <div className="mb-6">
-            <AudioRecorder
-              onTranscription={handleVoiceTranscription}
-              onError={(error) => console.error('Recorder error:', error)}
-            />
-          </div>
-        )}
 
         {/* Loading */}
         {running && (

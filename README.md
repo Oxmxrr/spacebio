@@ -74,7 +74,7 @@ This writes `data/index/meta.jsonl` and `data/index/index.faiss`.
 ```
 cd backend
 venv\Scripts\activate
-$env:BOOT_MODE = "full" (powershell)
+$env:BOOT_MODE = "full"
 uvicorn app:app --reload --port 8000
 ```
 You should see logs like:
