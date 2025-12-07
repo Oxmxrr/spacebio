@@ -6,7 +6,6 @@ __pycache__/
 # local data / models
 data/audio/
 data/index/
-models/
 %LOCALAPPDATA%/
 
 # env
@@ -21,3 +20,13 @@ spacebio/dist/
 # OS/editor
 .DS_Store
 .vscode/
+
+# Ignore all models by default
+models/*
+
+# But keep the Piper folder structure
+!models/piper/
+!models/piper/.gitkeep
+# Temp audio recordings
+data/tmp/
+*.webm
