@@ -183,3 +183,111 @@ BOOT_MODE=full
 Provide license terms here if applicable.
 
 
+Setting up Piper TTS on a new machine (Windows)
+
+🔹 Piper binaries and voice models are not committed to Git.
+On every new PC, you must download them into backend/models/piper/.
+
+Create the Piper folder
+
+From the project root:
+
+cd backend
+mkdir -Force models\piper
+
+
+Download Piper for Windows
+
+Go to the official releases page:
+
+https://github.com/rhasspy/piper/releases
+
+Download the 64-bit Windows build, for example:
+
+piper_windows_amd64.zip
+
+Unzip it and copy these items into backend\models\piper\:
+
+piper.exe
+
+piper_phonemize.dll
+
+espeak-ng.dll
+
+onnxruntime.dll
+
+onnxruntime_providers_shared.dll
+
+espeak-ng-data\ (whole folder)
+
+pkgconfig\ (if present in the zip)
+
+After this, your structure should look like:
+
+backend/
+  models/
+    piper/
+      piper.exe
+      espeak-ng.dll
+      onnxruntime.dll
+      onnxruntime_providers_shared.dll
+      piper_phonemize.dll
+      espeak-ng-data/
+      pkgconfig/
+
+
+Download the voice model
+
+Go to the Piper voices repo:
+
+https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/low
+
+Download both:
+
+en_US-amy-low.onnx
+
+en_US-amy-low.onnx.json
+
+Place them in the same folder: backend\models\piper\.
+
+Final expected layout:
+
+backend/
+  models/
+    piper/
+      piper.exe
+      espeak-ng.dll
+      onnxruntime.dll
+      onnxruntime_providers_shared.dll
+      piper_phonemize.dll
+      en_US-amy-low.onnx
+      en_US-amy-low.onnx.json
+      espeak-ng-data/
+      pkgconfig/
+
+
+Check .env settings
+
+In backend/.env make sure:
+
+PIPER_EXE=models/piper/piper.exe
+PIPER_VOICE=en_US-amy-low.onnx
+PIPER_USE_CUDA=false  # or true if you have CUDA set up
+
+
+Quick CLI smoke test
+
+Make sure backend/data/audio exists:
+
+cd backend
+mkdir -Force data\audio
+
+
+Then run:
+
+echo Hello from Piper | .\models\piper\piper.exe `
+  -m .\models\piper\en_US-amy-low.onnx `
+  -f .\data\audio\test.wav
+
+
+If test.wav is created and you can play it, Piper TTS is correctly installed and the app’s /tts endpoint should work.

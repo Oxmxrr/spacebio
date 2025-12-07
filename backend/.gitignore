@@ -21,12 +21,6 @@ spacebio/dist/
 .DS_Store
 .vscode/
 
-# Ignore all models by default
-models/*
-
-# But keep the Piper folder structure
-!models/piper/
-!models/piper/.gitkeep
 # Temp audio recordings
 data/tmp/
 *.webm
